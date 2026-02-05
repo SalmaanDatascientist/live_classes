@@ -8,7 +8,7 @@ from PIL import Image
 import base64
 
 # -----------------------------------------------------------------------------
-# PAGE CONFIGURATION
+# 1. PAGE CONFIGURATION
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="Molecular Man | Live Classroom",
@@ -18,13 +18,22 @@ st.set_page_config(
 )
 
 # -----------------------------------------------------------------------------
-# FILES & DATABASE SETUP (FIXED)
+# 2. SESSION STATE INITIALIZATION
+# -----------------------------------------------------------------------------
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+if "username" not in st.session_state:
+    st.session_state.username = None
+if "is_admin" not in st.session_state:
+    st.session_state.is_admin = False
+
+# -----------------------------------------------------------------------------
+# 3. FILES & DATABASE SETUP
 # -----------------------------------------------------------------------------
 USERS_FILE = "users_database.json"
 NOTIFICATIONS_FILE = "notifications.json"
 LIVE_STATUS_FILE = "live_status.json"
 
-# --- 1. USER DATABASE CREATION (The Missing Piece) ---
 def create_users_db():
     if not os.path.exists(USERS_FILE):
         default_users = {
@@ -35,23 +44,21 @@ def create_users_db():
         with open(USERS_FILE, "w") as f:
             json.dump(default_users, f)
 
-# --- 2. OTHER FILES INIT ---
 def init_files():
     if not os.path.exists(NOTIFICATIONS_FILE):
         with open(NOTIFICATIONS_FILE, "w") as f:
             json.dump([], f)
     
     if not os.path.exists(LIVE_STATUS_FILE):
-        # Default: Not live
         with open(LIVE_STATUS_FILE, "w") as f:
             json.dump({"is_live": False, "topic": "", "link": ""}, f)
 
-# RUN SETUP
+# Run setup immediately
 create_users_db()
 init_files()
 
 # -----------------------------------------------------------------------------
-# HELPER: IMAGE TO BASE64
+# 4. HELPER FUNCTIONS
 # -----------------------------------------------------------------------------
 def get_img_as_base64(file_path):
     try:
@@ -61,23 +68,61 @@ def get_img_as_base64(file_path):
     except Exception:
         return None
 
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def login_user(username, password):
+    try:
+        with open(USERS_FILE, "r") as f:
+            all_users = json.load(f)
+        if username in all_users and all_users[username] == hash_password(password):
+            return True
+        return False
+    except:
+        return False
+
+# Data Handling
+def get_notifications():
+    try:
+        with open(NOTIFICATIONS_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return []
+
+def add_notification(message):
+    notifs = get_notifications()
+    new_notif = {
+        "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "message": message
+    }
+    notifs.insert(0, new_notif)
+    with open(NOTIFICATIONS_FILE, "w") as f:
+        json.dump(notifs, f)
+
+def get_live_status():
+    try:
+        with open(LIVE_STATUS_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return {"is_live": False, "topic": "", "link": ""}
+
+def set_live_status(is_live, topic="", link=""):
+    status = {"is_live": is_live, "topic": topic, "link": link}
+    with open(LIVE_STATUS_FILE, "w") as f:
+        json.dump(status, f)
+
 # -----------------------------------------------------------------------------
-# CSS - DEEP BLUE & GOLD THEME
+# 5. CSS STYLING (Deep Blue & Gold)
 # -----------------------------------------------------------------------------
 st.markdown("""
 <style>
-    /* Main Background */
     .stApp {
         background: linear-gradient(135deg, #004e92 0%, #000428 100%) !important;
         background-attachment: fixed;
     }
-    
-    /* Text Colors */
     h1, h2, h3, h4, h5, h6, p, div, span, li, label, .stMarkdown {
         color: #ffffff !important;
     }
-    
-    /* Containers */
     div[data-testid="stVerticalBlockBorderWrapper"], .stForm {
         background-color: rgba(255, 255, 255, 0.05);
         border: 1px solid rgba(255, 255, 255, 0.2) !important;
@@ -85,8 +130,6 @@ st.markdown("""
         padding: 20px;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
     }
-    
-    /* Buttons - Gold Gradient */
     .stButton > button {
         background: linear-gradient(to bottom, #ffd700 0%, #ffb900 100%) !important;
         color: #000000 !important;
@@ -104,33 +147,11 @@ st.markdown("""
         transform: translateY(-2px) !important;
         box-shadow: 0 0 20px rgba(255, 215, 0, 0.6) !important;
     }
-    
-    /* Inputs */
-    .stTextInput > div > div > input, 
-    .stTextArea > div > div > textarea {
+    .stTextInput > div > div > input, .stTextArea > div > div > textarea {
         background-color: rgba(255, 255, 255, 0.1) !important;
         color: white !important;
         border: 1px solid rgba(255, 255, 255, 0.3) !important;
     }
-    
-    /* Live Badge Animation */
-    @keyframes pulse {
-        0% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7); }
-        70% { box-shadow: 0 0 0 10px rgba(255, 0, 0, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); }
-    }
-    .live-badge {
-        background-color: #ff0000;
-        color: white;
-        padding: 5px 15px;
-        border-radius: 20px;
-        font-weight: bold;
-        animation: pulse 2s infinite;
-        display: inline-block;
-        margin-left: 10px;
-    }
-    
-    /* Notification Card */
     .notif-card {
         background: rgba(255, 215, 0, 0.1);
         border-left: 4px solid #ffd700;
@@ -138,8 +159,16 @@ st.markdown("""
         margin-bottom: 10px;
         border-radius: 5px;
     }
-    
-    /* Hide Streamlit Branding */
+    @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+    }
+    .live-button-container {
+        text-align: center;
+        margin-top: 20px;
+        animation: pulse 2s infinite;
+    }
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
@@ -147,81 +176,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# AUTHENTICATION LOGIC
-# -----------------------------------------------------------------------------
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-if "username" not in st.session_state:
-    st.session_state.username = None
-if "is_admin" not in st.session_state:
-    st.session_state.is_admin = False
-
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
-def login_user(username, password):
-    try:
-        with open(USERS_FILE, "r") as f:
-            all_users = json.load(f)
-        if username in all_users and all_users[username] == hash_password(password):
-            return True
-        return False
-    except:
-        return False
-
-# -----------------------------------------------------------------------------
-# DATA FUNCTIONS
-# -----------------------------------------------------------------------------
-def get_notifications():
-    try:
-        with open(NOTIFICATIONS_FILE, "r") as f:
-            return json.load(f)
-    except:
-        return []
-
-def add_notification(message):
-    notifs = get_notifications()
-    new_notif = {
-        "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "message": message
-    }
-    notifs.insert(0, new_notif) # Add to top
-    with open(NOTIFICATIONS_FILE, "w") as f:
-        json.dump(notifs, f)
-
-def get_live_status():
-    try:
-        with open(LIVE_STATUS_FILE, "r") as f:
-            return json.load(f)
-    except:
-        return {"is_live": False, "topic": "", "link": ""}
-
-def set_live_status(is_live, topic="", link=""):
-    status = {"is_live": is_live, "topic": topic, "link": link}
-    with open(LIVE_STATUS_FILE, "w") as f:
-        json.dump(status, f)
-
-# -----------------------------------------------------------------------------
-# JITSI MEET COMPONENT
-# -----------------------------------------------------------------------------
-def render_jitsi(room_name, height=600):
-    jitsi_html = f"""
-    <div style="background-color: #000; border-radius: 15px; overflow: hidden; border: 2px solid #ffd700;">
-        <iframe allow="camera; microphone; fullscreen; display-capture; autoplay" 
-                src="https://meet.jit.si/{room_name}" 
-                style="height: {height}px; width: 100%; border: 0;">
-        </iframe>
-    </div>
-    """
-    st.components.v1.html(jitsi_html, height=height)
-
-# -----------------------------------------------------------------------------
-# VIEW: LOGIN PAGE
+# 6. VIEW: LOGIN PAGE
 # -----------------------------------------------------------------------------
 def show_login_page():
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # Logo
         try:
             c_l, c_c, c_r = st.columns([1, 2, 1])
             with c_c:
@@ -246,11 +205,10 @@ def show_login_page():
                     st.error("❌ Invalid Credentials")
 
 # -----------------------------------------------------------------------------
-# VIEW: ADMIN DASHBOARD (TEACHER)
+# 7. VIEW: ADMIN DASHBOARD (TEACHER)
 # -----------------------------------------------------------------------------
 def show_admin_dashboard():
     st.markdown("## 👨‍🏫 Teacher Command Center")
-    
     col1, col2 = st.columns([2, 1])
     
     with col1:
@@ -259,24 +217,33 @@ def show_admin_dashboard():
             status = get_live_status()
             
             if status["is_live"]:
-                st.success(f"✅ You are LIVE: {status['topic']}")
-                if st.button("End Class ⏹️", type="primary"):
+                st.success(f"✅ Class is LIVE: {status['topic']}")
+                
+                st.info("💡 **Multi-Device Support:** Open this same link on up to 5 devices (Laptop, iPad, Phone) and click the button below on each to share screens simultaneously.")
+                
+                # Teacher Join Link
+                st.markdown(f"""
+                    <div style="text-align:center; margin: 20px;">
+                        <a href="https://meet.jit.si/{status['link']}" target="_blank" style="text-decoration:none;">
+                            <button style="background: linear-gradient(45deg, #00c853, #b2ff59); color: black; padding: 20px 40px; border: none; border-radius: 50px; font-weight: bold; font-size: 20px; cursor: pointer; width: 100%;">
+                                🎥 Enter Classroom / Share Screen
+                            </button>
+                        </a>
+                    </div>
+                """, unsafe_allow_html=True)
+
+                if st.button("End Class ⏹️", type="primary", use_container_width=True):
                     set_live_status(False)
                     st.rerun()
-                
-                # Show the meeting for the teacher too
-                st.markdown("---")
-                render_jitsi(status['link'], height=500)
             else:
                 st.info("Start a new session")
                 topic = st.text_input("Class Topic", placeholder="e.g., Thermodynamics Part 2")
-                # Generate unique room name based on topic + random string to prevent zoombombing
+                # Create a secure room name
                 room_code = f"MolecularMan_{uuid.uuid4().hex[:8]}"
                 
-                if st.button("Go Live 📡"):
+                if st.button("Go Live 📡", use_container_width=True):
                     if topic:
                         set_live_status(True, topic, room_code)
-                        # Auto notification
                         add_notification(f"🔴 Live Class Started: {topic}. Join now!")
                         st.rerun()
                     else:
@@ -297,10 +264,9 @@ def show_admin_dashboard():
                 st.markdown(f"<small>{n['date']}</small><br>{n['message']}<hr>", unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# VIEW: STUDENT DASHBOARD
+# 8. VIEW: STUDENT DASHBOARD
 # -----------------------------------------------------------------------------
 def show_student_dashboard():
-    # Header with Logo
     col1, col2 = st.columns([3, 1])
     with col1:
         logo_b64 = get_img_as_base64("logo.png")
@@ -322,19 +288,27 @@ def show_student_dashboard():
 
     st.write("")
     
-    # Live Class Section
+    # LIVE STATUS SECTION
     status = get_live_status()
     
     if status["is_live"]:
+        # Direct link button to bypass iframe blocks
         st.markdown(f"""
-        <div style="background: rgba(255, 0, 0, 0.1); border: 2px solid red; padding: 20px; border-radius: 15px; text-align: center; margin-bottom: 20px;">
-            <h2 style="color: red !important; margin:0;">🔴 CLASS IN SESSION</h2>
-            <h3 style="margin-top: 10px;">Topic: {status['topic']}</h3>
+        <div style="background: rgba(255, 0, 0, 0.1); border: 2px solid red; padding: 30px; border-radius: 15px; text-align: center; margin-bottom: 20px;">
+            <h1 style="color: #ff4444 !important; margin:0; font-size: 40px;">🔴 LIVE NOW</h1>
+            <h2 style="color: white !important; margin-top: 10px;">Topic: {status['topic']}</h2>
+            <br>
+            <div class="live-button-container">
+                <a href="https://meet.jit.si/{status['link']}" target="_blank" style="text-decoration:none;">
+                    <button style="background: linear-gradient(45deg, #ff0000, #ff5252); color: white; padding: 20px 40px; border: none; border-radius: 50px; font-weight: bold; font-size: 24px; cursor: pointer; box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);">
+                        👉 CLICK TO JOIN CLASS
+                    </button>
+                </a>
+            </div>
+            <p style="margin-top: 15px; color: #aaa;">(Opens securely in a new tab)</p>
         </div>
         """, unsafe_allow_html=True)
         
-        # Jitsi Embed
-        render_jitsi(status['link'], height=700)
     else:
         st.markdown("""
         <div style="padding: 40px; text-align: center; border: 2px dashed #ffd700; border-radius: 15px; margin-bottom: 20px;">
@@ -343,7 +317,7 @@ def show_student_dashboard():
         </div>
         """, unsafe_allow_html=True)
 
-    # Notifications Section
+    # NOTIFICATIONS
     st.markdown("### 🔔 Notice Board")
     notifs = get_notifications()
     
@@ -359,7 +333,7 @@ def show_student_dashboard():
         st.info("No new announcements.")
 
 # -----------------------------------------------------------------------------
-# MAIN APP FLOW
+# 9. MAIN APP FLOW
 # -----------------------------------------------------------------------------
 if st.session_state.logged_in:
     if st.session_state.is_admin:
